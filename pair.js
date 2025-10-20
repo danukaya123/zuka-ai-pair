@@ -124,15 +124,18 @@ router.get('/', async (req, res) => {
         num = num.replace(/[^\d+]/g, '');
         if (num.startsWith('+')) num = num.substring(1);
         try {
-          let code = await KnightBot.requestPairingCode(num);
-          code = code?.match(/.{1,4}/g)?.join('-') || code;
-          if (!res.headersSent) {
-            console.log({ num, code });
-            res.write(JSON.stringify({ code })); // keep response open
-          }
-          // wait up to 55 s for user to pair before closing
-          await delay(55000);
-          if (!res.writableEnded) res.end();
+let code = await KnightBot.requestPairingCode(num);
+code = code?.match(/.{1,4}/g)?.join('-') || code;
+if (!res.headersSent) {
+  console.log({ num, code });
+  // ✅ send response immediately (frontend can display instantly)
+  res.status(200).json({ code });
+}
+
+// ⏳ keep WhatsApp socket alive for 45 seconds in background
+setTimeout(async () => {
+  console.log('⌛ waiting for user to complete pairing...');
+}, 45000);
         } catch (error) {
           console.error('Error requesting pairing code:', error);
           if (!res.headersSent) {
