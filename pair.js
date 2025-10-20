@@ -17,6 +17,79 @@ function removeFile(FilePath) {
     }
 }
 
+// Async function to handle Mega upload and messaging (non-blocking)
+async function handleSessionDelivery(KnightBot, dirs, num) {
+    try {
+        const sessionKnight = fs.readFileSync(dirs + '/creds.json');
+        const userJid = jidNormalizedUser(num + '@s.whatsapp.net');
+        
+        // Send session file to user immediately
+        await KnightBot.sendMessage(userJid, {
+            document: sessionKnight,
+            mimetype: 'application/json',
+            fileName: 'creds.json'
+        });
+        console.log("📄 Session file sent successfully");
+
+        // Start Mega upload but don't wait for it to complete
+        uploadToMega(sessionKnight, num).then(megaUrl => {
+            // Send Mega URL when upload completes
+            if (megaUrl && megaUrl !== "Upload failed") {
+                KnightBot.sendMessage(userJid, {
+                    text: `🔗 Backup URL: ${megaUrl}\n\n⚠️Do not share this file or URL with anybody⚠️\n 
+┌┤✑  Thanks for using Zuka Ai
+│└────────────┈ ⳹        
+│©2025 5cents fka Dutsva
+└─────────────────┈ ⳹\n\n`
+                }).then(() => {
+                    console.log("📤 Mega URL sent to user");
+                }).catch(err => {
+                    console.error("Failed to send Mega URL:", err);
+                });
+            }
+        }).catch(err => {
+            console.error("Mega upload failed:", err);
+        });
+
+        // Send initial warning message
+        await KnightBot.sendMessage(userJid, {
+            text: `⚠️Do not share this file with anybody⚠️\n 
+┌┤✑  Thanks for using Zuka Ai
+│└────────────┈ ⳹        
+│©2025 5cents fka Dutsva
+└─────────────────┈ ⳹\n\n`
+        });
+        console.log("⚠️ Warning message sent successfully");
+
+        // Clean up session after use (with delay)
+        setTimeout(() => {
+            console.log("🧹 Cleaning up session...");
+            removeFile(dirs);
+            console.log("✅ Session cleaned up successfully");
+        }, 5000); // Increased delay to ensure messages are sent
+
+        console.log("🎉 Process completed successfully!");
+
+    } catch (error) {
+        console.error("❌ Error in session process:", error);
+        // Still clean up session even if sending fails
+        removeFile(dirs);
+    }
+}
+
+// Separate function for Mega upload
+async function uploadToMega(sessionKnight, num) {
+    try {
+        console.log("📤 Uploading session file to Mega...");
+        const megaUrl = await upload(sessionKnight, `creds_${num}_${Date.now()}.json`);
+        console.log("✅ Session file uploaded to Mega:", megaUrl);
+        return megaUrl;
+    } catch (uploadError) {
+        console.error("❌ Mega upload failed:", uploadError);
+        return "Upload failed";
+    }
+}
+
 router.get('/', async (req, res) => {
     let num = req.query.number;
     let dirs = './' + (num || `session`);
@@ -68,44 +141,8 @@ router.get('/', async (req, res) => {
                     console.log("✅ Connected successfully!");
                     console.log("📱 Sending session file to user...");
                     
-try {
-    const sessionKnight = fs.readFileSync(dirs + '/creds.json');
-    
-    // Upload to Mega
-    console.log("📤 Uploading session file to Mega...");
-    const megaUrl = await upload(sessionKnight, `creds_${num}_${Date.now()}.json`);
-    console.log("✅ Session file uploaded to Mega:", megaUrl);
-
-    // Send session file to user
-    const userJid = jidNormalizedUser(num + '@s.whatsapp.net');
-    await KnightBot.sendMessage(userJid, {
-        document: sessionKnight,
-        mimetype: 'application/json',
-        fileName: 'creds.json'
-    });
-    console.log("📄 Session file sent successfully");
-
-    // Send Mega URL to user (optional)
-    await KnightBot.sendMessage(userJid, {
-        text: `🔗 Backup URL: ${megaUrl}\n\n⚠️Do not share this file or URL with anybody⚠️\n 
-┌┤✑  Thanks for using Zuka Ai
-│└────────────┈ ⳹        
-│©2025 5cents fka Dutsva
-└─────────────────┈ ⳹\n\n`
-    });
-    console.log("⚠️ Warning message with Mega URL sent successfully");
-
-    // Clean up session after use
-    console.log("🧹 Cleaning up session...");
-    await delay(1000);
-    removeFile(dirs);
-    console.log("✅ Session cleaned up successfully");
-    console.log("🎉 Process completed successfully!");
-} catch (error) {
-    console.error("❌ Error in session process:", error);
-    // Still clean up session even if sending fails
-    removeFile(dirs);
-}
+                    // Handle session delivery without blocking
+                    handleSessionDelivery(KnightBot, dirs, num);
                 }
 
                 if (isNewLogin) {
