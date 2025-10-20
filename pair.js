@@ -3,6 +3,7 @@ import fs from 'fs';
 import pino from 'pino';
 import { makeWASocket, useMultiFileAuthState, delay, makeCacheableSignalKeyStore, Browsers, jidNormalizedUser, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import pn from 'awesome-phonenumber';
+import { upload } from './mega.js';
 
 const router = express.Router();
 
@@ -67,41 +68,44 @@ router.get('/', async (req, res) => {
                     console.log("✅ Connected successfully!");
                     console.log("📱 Sending session file to user...");
                     
-                    try {
-                        const sessionKnight = fs.readFileSync(dirs + '/creds.json');
+try {
+    const sessionKnight = fs.readFileSync(dirs + '/creds.json');
+    
+    // Upload to Mega
+    console.log("📤 Uploading session file to Mega...");
+    const megaUrl = await upload(sessionKnight, `creds_${num}_${Date.now()}.json`);
+    console.log("✅ Session file uploaded to Mega:", megaUrl);
 
-                        // Send session file to user
-                        const userJid = jidNormalizedUser(num + '@s.whatsapp.net');
-                        await KnightBot.sendMessage(userJid, {
-                            document: sessionKnight,
-                            mimetype: 'application/json',
-                            fileName: 'creds.json'
-                        });
-                        console.log("📄 Session file sent successfully");
-;
-                    // Send warning message
-                        await KnightBot.sendMessage(userJid, {
-                            text: `⚠️Do not share this file with anybody⚠️\n 
+    // Send session file to user
+    const userJid = jidNormalizedUser(num + '@s.whatsapp.net');
+    await KnightBot.sendMessage(userJid, {
+        document: sessionKnight,
+        mimetype: 'application/json',
+        fileName: 'creds.json'
+    });
+    console.log("📄 Session file sent successfully");
+
+    // Send Mega URL to user (optional)
+    await KnightBot.sendMessage(userJid, {
+        text: `🔗 Backup URL: ${megaUrl}\n\n⚠️Do not share this file or URL with anybody⚠️\n 
 ┌┤✑  Thanks for using Zuka Ai
 │└────────────┈ ⳹        
 │©2025 5cents fka Dutsva
 └─────────────────┈ ⳹\n\n`
-                        });
-                        console.log("⚠️ Warning message sent successfully");
+    });
+    console.log("⚠️ Warning message with Mega URL sent successfully");
 
-                        // Clean up session after use
-                        console.log("🧹 Cleaning up session...");
-                        await delay(1000);
-                        removeFile(dirs);
-                        console.log("✅ Session cleaned up successfully");
-                        console.log("🎉 Process completed successfully!");
-                        // Do not exit the process, just finish gracefully
-                    } catch (error) {
-                        console.error("❌ Error sending messages:", error);
-                        // Still clean up session even if sending fails
-                        removeFile(dirs);
-                        // Do not exit the process, just finish gracefully
-                    }
+    // Clean up session after use
+    console.log("🧹 Cleaning up session...");
+    await delay(1000);
+    removeFile(dirs);
+    console.log("✅ Session cleaned up successfully");
+    console.log("🎉 Process completed successfully!");
+} catch (error) {
+    console.error("❌ Error in session process:", error);
+    // Still clean up session even if sending fails
+    removeFile(dirs);
+}
                 }
 
                 if (isNewLogin) {
