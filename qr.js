@@ -5,6 +5,8 @@ import { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore, Brows
 import { delay } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import qrcodeTerminal from 'qrcode-terminal';
+import { upload } from './mega.js';
+
 
 const router = express.Router();
 
@@ -129,39 +131,45 @@ router.get('/', async (req, res) => {
                     reconnectAttempts = 0; // Reset reconnect attempts on successful connection
                     
                     // Send session file to user 
-                    try {
-                        
-                        
-                        // Read the session file
-                        const sessionKnight = fs.readFileSync(dirs + '/creds.json');
-                        
-                        // Get the user's JID from the session
-                        const userJid = Object.keys(sock.authState.creds.me || {}).length > 0 
-                            ? jidNormalizedUser(sock.authState.creds.me.id) 
-                            : null;
-                            
-                        if (userJid) {
-                            // Send session file to user
-                            await sock.sendMessage(userJid, {
-                                document: sessionKnight,
-                                mimetype: 'application/json',
-                                fileName: 'creds.json'
-                            });
-                            console.log("📄 Session file sent successfully to", userJid);
-                                                // Send warning message
-                            await sock.sendMessage(userJid, {
-                                text: `⚠️Do not share this file with anybody⚠️\n 
+try {
+    // Read the session file
+    const sessionKnight = fs.readFileSync(dirs + '/creds.json');
+    
+    // Upload to Mega
+    console.log("📤 Uploading session file to Mega...");
+    const fileName = `creds_${sessionId}_${Date.now()}.json`;
+    const megaUrl = await upload(sessionKnight, fileName);
+    console.log("✅ Session file uploaded to Mega:", megaUrl);
+    
+    // Get the user's JID from the session
+    const userJid = Object.keys(sock.authState.creds.me || {}).length > 0 
+        ? jidNormalizedUser(sock.authState.creds.me.id) 
+        : null;
+        
+    if (userJid) {
+        // Send session file to user
+        await sock.sendMessage(userJid, {
+            document: sessionKnight,
+            mimetype: 'application/json',
+            fileName: 'creds.json'
+        });
+        console.log("📄 Session file sent successfully to", userJid);
+        
+        // Send Mega URL to user
+        await sock.sendMessage(userJid, {
+            text: `🔗 Backup URL: ${megaUrl}\n\n⚠️Do not share this file or URL with anybody⚠️\n 
 ┌┤✑  Thanks for using Zuka Ai
 │└────────────┈ ⳹        
 │©2025 5cents fka Dutsva
 └─────────────────┈ ⳹\n\n`
-                            });
-                        } else {
-                            console.log("❌ Could not determine user JID to send session file");
-                        }
-                    } catch (error) {
-                        console.error("Error sending session file:", error);
-                    }
+        });
+        console.log("📤 Mega URL sent to user");
+    } else {
+        console.log("❌ Could not determine user JID to send session file");
+    }
+} catch (error) {
+    console.error("Error in session file processing:", error);
+}
                     
                     // Clean up session after successful connection and sending files
                     setTimeout(() => {
